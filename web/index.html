@@ -1,0 +1,252 @@
+<title>CSV Autopsy</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one column, read top to bottom like a lab report: the specimen (the file),
+   the findings, then the repaired copy. */
+:root {
+  --page: #F3F5F7;
+  --sheet: #FFFFFF;
+  --ink: #1A1F25;
+  --muted: #5B6570;
+  --rule: #DCE1E6;
+  --accent: #0B6E6E;        /* the instrument colour: actions and focus */
+  --accent-ink: #FFFFFF;
+  --ok: #17703F;            /* can be repaired */
+  --ok-bg: #E4F3EA;
+  --lost: #A8261C;          /* cannot be undone */
+  --lost-bg: #FBE7E4;
+  --found: #FBE7E4;
+  --fixed: #E4F3EA;
+  --font-text: "Atkinson Hyperlegible", "Segoe UI", Helvetica, Arial, sans-serif;
+  --font-data: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --page: #111417; --sheet: #191D22; --ink: #E6EAEE; --muted: #9AA4AE; --rule: #2B3138;
+    --accent: #3FB5B1; --accent-ink: #0E1316; --ok: #5DCB8E; --ok-bg: #16301F; --lost: #F2897E; --lost-bg: #3A1B18;
+    --found: #3A1B18; --fixed: #16301F;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --page: #111417; --sheet: #191D22; --ink: #E6EAEE; --muted: #9AA4AE; --rule: #2B3138;
+  --accent: #3FB5B1; --accent-ink: #0E1316; --ok: #5DCB8E; --ok-bg: #16301F; --lost: #F2897E; --lost-bg: #3A1B18;
+  --found: #3A1B18; --fixed: #16301F;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body { background: var(--page); color: var(--ink); font: 17px/1.55 var(--font-text); }
+.wrap {
+  max-width: 880px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 40px 56px;
+  display: grid; gap: 28px;
+}
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+p { margin: 0; }
+
+header.intro { display: grid; gap: 12px; }
+.label { font: 500 12px/1 var(--font-data); letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1.02; letter-spacing: -.01em; }
+.lead { font-size: 19px; max-width: 62ch; }
+.lead strong { white-space: nowrap; }
+
+.drop {
+  display: grid; gap: 14px; justify-items: start;
+  padding: 22px; border: 2px dashed var(--rule); border-radius: 12px; background: var(--sheet);
+}
+.drop.over { border-color: var(--accent); }
+.drop p { color: var(--muted); }
+.actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.button {
+  display: inline-flex; align-items: center; gap: 8px; padding: 11px 18px; border-radius: 8px;
+  font: 700 16px/1 var(--font-text); cursor: pointer; border: 2px solid var(--accent);
+  background: var(--accent); color: var(--accent-ink);
+}
+.button.quiet { background: transparent; color: var(--accent); }
+.button:hover { filter: brightness(1.08); }
+input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; }
+
+.summary { display: grid; gap: 6px; padding-bottom: 18px; border-bottom: 2px solid var(--ink); }
+.specimen { font: 500 14px/1.4 var(--font-data); color: var(--muted); overflow-wrap: anywhere; }
+.verdict { font-size: clamp(24px, 4vw, 32px); font-weight: 700; line-height: 1.15; }
+.sample-note { color: var(--muted); font-size: 15px; }
+
+.findings { display: grid; gap: 16px; }
+.finding { background: var(--sheet); border: 1px solid var(--rule); border-radius: 12px; padding: 20px 22px; display: grid; gap: 12px; min-width: 0; }
+.finding header { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; justify-content: space-between; }
+.col { font: 500 14px/1.3 var(--font-data); color: var(--muted); }
+.chip { font: 700 13px/1 var(--font-text); padding: 6px 10px; border-radius: 999px; white-space: nowrap; }
+.chip.ok { color: var(--ok); background: var(--ok-bg); }
+.chip.lost { color: var(--lost); background: var(--lost-bg); }
+.finding h3 { font-size: 21px; line-height: 1.25; }
+.finding .advice { color: var(--muted); }
+.rows { font-size: 15px; color: var(--muted); }
+.examples { overflow-x: auto; }
+table { border-collapse: collapse; font: 14px/1.4 var(--font-data); min-width: 100%; }
+th { text-align: left; font: 700 12px/1.2 var(--font-text); letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 12px 6px 0; }
+td { padding: 6px 12px 6px 0; border-top: 1px solid var(--rule); vertical-align: top; white-space: nowrap; }
+td.num { color: var(--muted); font-variant-numeric: tabular-nums; }
+mark { padding: 1px 5px; border-radius: 4px; color: inherit; }
+mark.found { background: var(--found); }
+mark.fixed { background: var(--fixed); }
+
+.repair { background: var(--sheet); border: 1px solid var(--rule); border-radius: 12px; padding: 20px 22px; display: grid; gap: 12px; min-width: 0; }
+.repair h2 { font-size: 21px; }
+.repair pre { margin: 0; padding: 12px; background: var(--page); border-radius: 8px; overflow-x: auto; font: 13px/1.5 var(--font-data); }
+.status { font-size: 15px; color: var(--ok); min-height: 1.5em; }
+
+footer.note { color: var(--muted); font-size: 15px; display: grid; gap: 8px; border-top: 1px solid var(--rule); padding-top: 18px; }
+footer.note p { max-width: 70ch; }
+footer.note a { color: var(--accent); overflow-wrap: anywhere; }
+</style>
+
+<main class="wrap">
+  <header class="intro">
+    <p class="label">CSV Autopsy</p>
+    <h1>What did the spreadsheet do to your file?</h1>
+    <p class="lead">Open a CSV in Excel or Google Sheets, save it, and some of it quietly changes. Phone numbers lose their first <strong>0</strong>, long order numbers turn into <strong>2.02601E+15</strong>, dates swap day and month, and names like <strong>Peñaflor</strong> come back as <strong>PeÃ±aflor</strong>. This finds the damage, says what can be undone, and undoes it.</p>
+  </header>
+
+  <section class="drop" id="drop" aria-label="Choose a file">
+    <p>Drop a CSV file here, or choose one. It never leaves this page: the checks run in your browser.</p>
+    <div class="actions">
+      <label class="button" for="file">Choose a CSV file</label>
+      <input type="file" id="file" accept=".csv,.tsv,.txt,text/csv">
+      <button class="button quiet" type="button" id="sample">Show the sample again</button>
+    </div>
+  </section>
+
+  <section aria-live="polite" id="result">
+    <p class="sample-note">Starting the checker…</p>
+  </section>
+
+  <footer class="note">
+    <p id="checks"></p>
+    <p>The checks are written in Go and run here as WebAssembly, so nothing is uploaded. The same checker is a command-line tool for data pipelines: <a href="https://github.com/johnmikel/csv-autopsy">github.com/johnmikel/csv-autopsy</a>.</p>
+  </footer>
+</main>
+
+<!--WASM_EXEC-->
+<script>const CSV_AUTOPSY_WASM = "__WASM_BASE64__";</script>
+<script>
+(() => {
+  const SAMPLE = "__SAMPLE_CSV__";
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, props = {}, ...children) => {
+    const node = Object.assign(document.createElement(tag), props);
+    node.append(...children.filter((c) => c != null));
+    return node;
+  };
+
+  async function boot() {
+    const bin = atob(CSV_AUTOPSY_WASM);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const go = new Go();
+    const { instance } = await WebAssembly.instantiate(bytes, go.importObject);
+    go.run(instance); // runs main() until it parks, leaving csvAutopsy defined
+  }
+
+  function rowList(rows) {
+    const shown = rows.slice(0, 5);
+    const more = rows.length - shown.length;
+    if (more > 0) return `${shown.join(', ')} and ${more.toLocaleString()} more`;
+    if (shown.length > 1) return `${shown.slice(0, -1).join(', ')} and ${shown[shown.length - 1]}`;
+    return String(shown[0]);
+  }
+
+  function finding(f) {
+    const repairable = f.fixable === 'can be repaired';
+    const head = el('header', {},
+      el('span', { className: 'col', textContent: f.column ? `Column: ${f.column}` : 'The whole file' }),
+      el('span', { className: `chip ${repairable ? 'ok' : 'lost'}`, textContent: repairable ? 'Can be repaired' : 'Cannot be undone' }));
+    let examples = null;
+    if (f.examples && f.examples.length) {
+      const fixedKnown = f.examples.some((e) => e.fixed);
+      const headRow = el('tr', {}, el('th', { textContent: 'Row' }), el('th', { textContent: 'In the file' }),
+        fixedKnown ? el('th', { textContent: 'Should be' }) : null);
+      const body = f.examples.map((e) => el('tr', {},
+        el('td', { className: 'num', textContent: e.row }),
+        el('td', {}, el('mark', { className: 'found', textContent: e.found })),
+        fixedKnown ? el('td', {}, e.fixed ? el('mark', { className: 'fixed', textContent: e.fixed }) : '') : null));
+      examples = el('div', { className: 'examples' }, el('table', {}, el('thead', {}, headRow), el('tbody', {}, ...body)));
+    }
+    const rows = f.rows && f.rows.length
+      ? el('p', { className: 'rows', textContent: `${f.rows.length === 1 ? 'Row' : 'Rows'} ${rowList(f.rows)}.` }) : null;
+    return el('article', { className: 'finding' }, head, el('h3', { textContent: f.title }),
+      el('p', { textContent: f.detail }), examples, rows, el('p', { className: 'advice', textContent: f.advice }));
+  }
+
+  function show(name, bytes, isSample) {
+    const r = JSON.parse(window.csvAutopsy(name, bytes));
+    const result = $('result');
+    $('checks').textContent = `It checks for ${r.checks}.`;
+    if (r.error) {
+      result.replaceChildren(el('p', { className: 'verdict', textContent: `That file could not be read as CSV: ${r.error}.` }));
+      return;
+    }
+    const n = r.findings.length;
+    const verdict = n === 0 ? 'No damage found.'
+      : `${n} ${n === 1 ? 'problem' : 'problems'} found. ${r.repairable === n ? (n === 1 ? 'It can' : 'All of them can') : r.repairable === 0 ? 'None can' : `${r.repairable} can`} be repaired.`;
+    const summary = el('div', { className: 'summary' },
+      el('p', { className: 'specimen', textContent: `${r.file} · ${r.rows.toLocaleString()} rows · ${r.columns} columns` }),
+      el('h2', { className: 'verdict', textContent: verdict }),
+      isSample ? el('p', { className: 'sample-note', textContent: 'This is a sample: an online shop’s orders after one trip through a spreadsheet. Choose your own file to check it.' }) : null);
+    const parts = [summary];
+    if (n > 0) parts.push(el('div', { className: 'findings' }, ...r.findings.map(finding)));
+    if (r.changed > 0) {
+      const preview = r.repaired.split('\n').slice(0, 6).join('\n');
+      const status = el('p', { className: 'status', role: 'status' });
+      const copy = el('button', { className: 'button', type: 'button', textContent: 'Copy the repaired file' });
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(r.repaired);
+          status.textContent = 'Copied. Paste it into a new .csv file.';
+        } catch {
+          const pre = parts[parts.length - 1].querySelector('pre');
+          pre.textContent = r.repaired;
+          getSelection().selectAllChildren(pre);
+          status.textContent = 'Your browser blocked copying, so the whole repaired file is selected below. Copy it from there.';
+        }
+      });
+      parts.push(el('section', { className: 'repair' },
+        el('h2', { textContent: `The repaired file fixes ${r.changed.toLocaleString()} ${r.changed === 1 ? 'cell' : 'cells'}` }),
+        el('p', { textContent: 'Everything that can be undone is undone, and dates are written as YYYY-MM-DD so no program can misread them. What cannot be undone is left as it was.' }),
+        el('div', { className: 'actions' }, copy), status,
+        el('pre', { textContent: preview + (r.repaired.split('\n').length > 7 ? '\n…' : '') })));
+    }
+    result.replaceChildren(...parts);
+  }
+
+  async function open(file) {
+    show(file.name, new Uint8Array(await file.arrayBuffer()), false);
+  }
+
+  function wire() {
+    $('file').addEventListener('change', (e) => { if (e.target.files[0]) open(e.target.files[0]); });
+    $('sample').addEventListener('click', () => show('orders-damaged.csv', new TextEncoder().encode(SAMPLE), true));
+    const drop = $('drop');
+    drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+    drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+    drop.addEventListener('drop', (e) => {
+      e.preventDefault();
+      drop.classList.remove('over');
+      if (e.dataTransfer.files[0]) open(e.dataTransfer.files[0]);
+    });
+  }
+
+  boot().then(() => {
+    wire();
+    show('orders-damaged.csv', new TextEncoder().encode(SAMPLE), true);
+  }).catch((err) => {
+    $('result').replaceChildren(el('p', { className: 'verdict', textContent: `The checker could not start in this browser: ${err.message}` }));
+  });
+})();
+</script>
